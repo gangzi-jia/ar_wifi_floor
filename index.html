@@ -626,8 +626,8 @@
     function loop() {
       requestAnimationFrame(loop);
 
-      // Camera rotation — responsive slerp
-      curQ.slerp(targetQ, 0.3);
+      // Camera rotation — instant follow, no lag
+      curQ.copy(targetQ);
       camera.quaternion.copy(curQ);
 
       // Camera position — manual buttons only
