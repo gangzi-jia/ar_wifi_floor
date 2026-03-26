@@ -342,16 +342,9 @@
     </div>
   </div>
 
-  <div class="hud pos-card" id="hudPos" style="display:none">
-    <div style="font-size:8px;color:#6e6e80;font-family:'Consolas',monospace;margin-bottom:4px">POSITION</div>
-    <div class="val" id="vPos">0.0, 0.0</div>
-  </div>
 
   <div class="hud hud-bot" id="hudBot" style="display:none">
-    <button class="btn" onclick="moveForward(-0.5)">Back</button>
-    <button class="btn on" onclick="moveForward(0.5)">Forward</button>
-    <button class="btn" onclick="resetPos()">Reset</button>
-    <button class="btn" onclick="reconfig()">Remap</button>
+    <button class="btn on" onclick="reconfig()">Remap</button>
   </div>
 
   <div class="scanline" id="scanline" style="display:none"></div>
@@ -363,7 +356,7 @@
     // ══════════════════════════════════════
     const SPACING = { Low: 0.5, Medium: 0.2, High: 0.1 };
     let densKey = 'Medium';
-    const PLANE_H = 0.5; // signal plane height
+    const PLANE_H = 0.1; // signal plane height (10cm)
     const EYE_H = 1.5; // phone holding height
 
     // Room dimensions (set by user)
@@ -485,11 +478,7 @@
     let targetQ = new THREE.Quaternion();
     const euler = new THREE.Euler(0, 0, 0, 'YXZ');
 
-    // Position tracking
-    let camX = 0, camZ = 0; // horizontal position offset
-    let lastStepTime = 0;
-    let accelHistory = [];
-    const STEP_LEN = 0.65; // meters per step
+    // No position tracking — user stays in place, uses Remap to reposition
 
     function initSensors() {
       // Gyroscope
@@ -512,16 +501,13 @@
         tryGyro();
       }
 
-      // Accelerometer for step detection
-      if (window.DeviceMotionEvent) {
-        window.addEventListener('devicemotion', onMotion, true);
-      }
+      // No step detection — static position
     }
 
     function onOri(e) {
       if (e.alpha == null && e.beta == null) return;
       hasGyro = true;
-      document.getElementById('subLabel').textContent = 'GYROSCOPE + STEP DETECT';
+      document.getElementById('subLabel').textContent = 'GYROSCOPE';
 
       const alpha = e.alpha || 0;
       const beta = e.beta || 0;
@@ -541,38 +527,6 @@
       targetQ.setFromEuler(euler);
     }
 
-    // Step detection from accelerometer
-    function onMotion(e) {
-      const acc = e.accelerationIncludingGravity;
-      if (!acc) return;
-      const mag = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
-      const now = Date.now();
-
-      accelHistory.push({ mag, t: now });
-      // Keep last 500ms
-      accelHistory = accelHistory.filter(a => now - a.t < 500);
-
-      if (accelHistory.length < 3) return;
-
-      // Detect step: acceleration spike above threshold
-      const avg = accelHistory.reduce((s, a) => s + a.mag, 0) / accelHistory.length;
-      const peak = mag - avg;
-
-      if (peak > 1.8 && now - lastStepTime > 280) {
-        lastStepTime = now;
-        moveForward(STEP_LEN);
-      }
-    }
-
-    function moveForward(dist) {
-      const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-      dir.y = 0;
-      dir.normalize();
-      const newX = camX + dir.x * dist;
-      const newZ = camZ + dir.z * dist;
-      if (newX >= -roomL && newX <= roomR) camX = newX;
-      if (newZ >= -roomF && newZ <= roomB) camZ = newZ;
-    }
 
     // Touch/mouse fallback
     let tRotX = 0, tRotY = 0;
@@ -652,14 +606,7 @@
       curQ.slerp(targetQ, 0.3);
       camera.quaternion.copy(curQ);
 
-      // Camera position — follows step detection
-      camera.position.set(camX, 0, camZ);
-
-      // Update position display
-      const posEl = document.getElementById('vPos');
-      if (posEl && posEl.style.display !== 'none') {
-        posEl.textContent = `${camX.toFixed(1)}, ${camZ.toFixed(1)}`;
-      }
+      // Camera stays at origin (0, 0, 0)
 
       renderer.render(scene, camera);
 
@@ -685,9 +632,7 @@
     // ══════════════════════════════════════
     //  CONTROLS
     // ══════════════════════════════════════
-    function resetPos() {
-      camX = 0;
-      camZ = 0;
+    function resetView() {
       baseAlpha = null;
       curQ.identity();
       targetQ.identity();
@@ -697,7 +642,7 @@
 
     function reconfig() {
       document.getElementById('setup').classList.remove('gone');
-      ['hudTop', 'hudStat', 'hudPos', 'hudBot', 'scanline'].forEach(id =>
+      ['hudTop', 'hudStat', 'hudBot', 'scanline'].forEach(id =>
         document.getElementById(id).style.display = 'none');
     }
 
@@ -711,7 +656,7 @@
       roomR = parseFloat(document.getElementById('dR').value) || 4;
 
       document.getElementById('setup').classList.add('gone');
-      ['hudTop', 'hudStat', 'hudPos', 'hudBot', 'scanline'].forEach(id =>
+      ['hudTop', 'hudStat', 'hudBot', 'scanline'].forEach(id =>
         document.getElementById(id).style.display = '');
 
       await startCam();
