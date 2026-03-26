@@ -452,8 +452,9 @@
 
       totalNodes = points.length;
 
-      const geo = new THREE.SphereGeometry(1, 8, 8);
-      const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9 });
+      const geo = new THREE.CircleGeometry(1, 16);
+      geo.rotateX(-Math.PI / 2); // face up
+      const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9, side: THREE.DoubleSide });
       instancedMesh = new THREE.InstancedMesh(geo, mat, totalNodes);
 
       const dummy = new THREE.Object3D();
