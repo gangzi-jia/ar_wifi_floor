@@ -359,7 +359,7 @@
     // ══════════════════════════════════════
     const SPACING = { Low: 0.5, Medium: 0.2, High: 0.1 };
     let densKey = 'Medium';
-    const PLANE_H = 0.1; // signal plane height (10cm)
+    const PLANE_H = 0.0; // signal plane at ground level
     const EYE_H = 1.5; // phone holding height
 
     // Room dimensions (set by user)
@@ -535,9 +535,8 @@
 
       const a = THREE.MathUtils.degToRad(da);
       const b = THREE.MathUtils.degToRad(beta - 90);
-      const g = THREE.MathUtils.degToRad(-gamma);
-
-      euler.set(b, a, g, 'YXZ');
+      // Lock roll to 0 — keep floor plane always horizontal
+      euler.set(b, a, 0, 'YXZ');
       targetQ.setFromEuler(euler);
     }
 
