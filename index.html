@@ -480,12 +480,11 @@
     let baseAlpha = null;
     let curQ = new THREE.Quaternion();
     let targetQ = new THREE.Quaternion();
-    const euler = new THREE.Euler(0, 0, 0, 'ZXY');
+    const euler = new THREE.Euler(0, 0, 0, 'YXZ');
     const deviceQuaternion = new THREE.Quaternion();
     const screenTransform = new THREE.Quaternion();
     // -90° around X: converts device coords (Z-up when flat) to Three.js (Y-up, look along -Z)
     const worldFixQ = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
-    const baseAlphaQ = new THREE.Quaternion();
     let screenOrientation = 0;
 
     function updateScreenOrientation() {
@@ -541,36 +540,26 @@
       const beta = e.beta || 0;
       const gamma = e.gamma || 0;
 
-      // Capture initial heading so "forward" = wherever you pointed at start
-      if (baseAlpha === null) {
-        baseAlpha = alpha;
-        baseAlphaQ.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -THREE.MathUtils.degToRad(baseAlpha));
-      }
+      if (baseAlpha === null) baseAlpha = alpha;
 
-      // Standard Device Orientation → Three.js quaternion conversion
-      // Step 1: ZXY Euler from device angles
+      // Three.js DeviceOrientationControls standard algorithm (YXZ order)
       euler.set(
         THREE.MathUtils.degToRad(beta),
-        THREE.MathUtils.degToRad(alpha),
+        THREE.MathUtils.degToRad(alpha - baseAlpha),
         -THREE.MathUtils.degToRad(gamma),
-        'ZXY'
+        'YXZ'
       );
-
-      // Step 2: To quaternion
       deviceQuaternion.setFromEuler(euler);
 
-      // Step 3: Apply world fix (-90° X) so phone-flat = looking-at-floor
+      // -90° X: phone upright = looking at horizon, phone flat = looking at floor
       deviceQuaternion.multiply(worldFixQ);
 
-      // Step 4: Screen orientation compensation (portrait/landscape)
+      // Screen orientation (portrait/landscape)
       screenTransform.setFromAxisAngle(
         new THREE.Vector3(0, 0, 1),
         -THREE.MathUtils.degToRad(screenOrientation)
       );
       deviceQuaternion.multiply(screenTransform);
-
-      // Step 5: Subtract initial heading so start direction = forward
-      deviceQuaternion.premultiply(baseAlphaQ);
 
       targetQ.copy(deviceQuaternion);
     }
@@ -650,8 +639,8 @@
     function loop() {
       requestAnimationFrame(loop);
 
-      // Camera rotation — light slerp to reduce sensor jitter
-      curQ.slerp(targetQ, 0.6);
+      // Camera rotation — instant follow
+      curQ.copy(targetQ);
       camera.quaternion.copy(curQ);
 
       // Camera position — manual buttons only
@@ -685,7 +674,6 @@
       camX = 0;
       camZ = 0;
       baseAlpha = null;
-      baseAlphaQ.identity();
       curQ.identity();
       targetQ.identity();
       tRotX = 0;
