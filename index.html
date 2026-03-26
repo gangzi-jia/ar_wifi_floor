@@ -480,7 +480,20 @@
     let baseAlpha = null;
     let curQ = new THREE.Quaternion();
     let targetQ = new THREE.Quaternion();
-    const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+    const euler = new THREE.Euler(0, 0, 0, 'ZXY');
+    const deviceQuaternion = new THREE.Quaternion();
+    const screenTransform = new THREE.Quaternion();
+    // -90° around X: converts device coords (Z-up when flat) to Three.js (Y-up, look along -Z)
+    const worldFixQ = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+    const baseAlphaQ = new THREE.Quaternion();
+    let screenOrientation = 0;
+
+    function updateScreenOrientation() {
+      screenOrientation = (screen.orientation && screen.orientation.angle !== undefined)
+        ? screen.orientation.angle : (window.orientation || 0);
+    }
+    window.addEventListener('orientationchange', updateScreenOrientation);
+    updateScreenOrientation();
 
     // Manual position tracking only (no auto step detection)
     let camX = 0, camZ = 0;
@@ -525,20 +538,41 @@
       document.getElementById('subLabel').textContent = 'GYROSCOPE';
 
       const alpha = e.alpha || 0;
-      if (baseAlpha === null) baseAlpha = alpha;
+      const beta = e.beta || 0;
+      const gamma = e.gamma || 0;
 
-      // Yaw: ONLY from alpha (compass heading), not affected by gamma
-      let da = alpha - baseAlpha;
-      if (da > 180) da -= 360;
-      if (da < -180) da += 360;
-      const yaw = THREE.MathUtils.degToRad(da);
+      // Capture initial heading so "forward" = wherever you pointed at start
+      if (baseAlpha === null) {
+        baseAlpha = alpha;
+        baseAlphaQ.setFromAxisAngle(new THREE.Vector3(0, 0, 1), -THREE.MathUtils.degToRad(baseAlpha));
+      }
 
-      // Pitch: from beta (phone tilt up/down)
-      const pitch = THREE.MathUtils.degToRad((e.beta || 0) - 90);
+      // Standard Device Orientation → Three.js quaternion conversion
+      // Step 1: ZXY Euler from device angles
+      euler.set(
+        THREE.MathUtils.degToRad(beta),
+        THREE.MathUtils.degToRad(alpha),
+        -THREE.MathUtils.degToRad(gamma),
+        'ZXY'
+      );
 
-      // Yaw + pitch, roll always 0 → floor stays horizontal
-      euler.set(pitch, yaw, 0, 'YXZ');
-      targetQ.setFromEuler(euler);
+      // Step 2: To quaternion
+      deviceQuaternion.setFromEuler(euler);
+
+      // Step 3: Apply world fix (-90° X) so phone-flat = looking-at-floor
+      deviceQuaternion.multiply(worldFixQ);
+
+      // Step 4: Screen orientation compensation (portrait/landscape)
+      screenTransform.setFromAxisAngle(
+        new THREE.Vector3(0, 0, 1),
+        -THREE.MathUtils.degToRad(screenOrientation)
+      );
+      deviceQuaternion.multiply(screenTransform);
+
+      // Step 5: Subtract initial heading so start direction = forward
+      deviceQuaternion.premultiply(baseAlphaQ);
+
+      targetQ.copy(deviceQuaternion);
     }
 
 
@@ -616,8 +650,8 @@
     function loop() {
       requestAnimationFrame(loop);
 
-      // Camera rotation — instant follow, no lag
-      curQ.copy(targetQ);
+      // Camera rotation — light slerp to reduce sensor jitter
+      curQ.slerp(targetQ, 0.6);
       camera.quaternion.copy(curQ);
 
       // Camera position — manual buttons only
@@ -651,6 +685,7 @@
       camX = 0;
       camZ = 0;
       baseAlpha = null;
+      baseAlphaQ.identity();
       curQ.identity();
       targetQ.identity();
       tRotX = 0;
