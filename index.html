@@ -477,11 +477,11 @@
     //  CAMERA — gyroscope for rotation, step detection for movement
     // ══════════════════════════════════════
     let hasGyro = false;
-    let baseYaw = null;
+    let baseAlpha = null;
     let curQ = new THREE.Quaternion();
     let targetQ = new THREE.Quaternion();
     const euler = new THREE.Euler(0, 0, 0, 'YXZ');
-    const _screenQ = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+    const FIXED_PITCH = -Math.PI / 3; // fixed 60° looking down at floor
 
     // Manual position tracking only (no auto step detection)
     let camX = 0, camZ = 0;
@@ -525,29 +525,18 @@
       hasGyro = true;
       document.getElementById('subLabel').textContent = 'GYROSCOPE';
 
-      const alpha = THREE.MathUtils.degToRad(e.alpha || 0);
-      const beta = THREE.MathUtils.degToRad(e.beta || 0);
-      const gamma = THREE.MathUtils.degToRad(e.gamma || 0);
+      const alpha = e.alpha || 0;
+      if (baseAlpha === null) baseAlpha = alpha;
 
-      // Device orientation → full quaternion (W3C standard → Three.js)
-      const deviceQ = new THREE.Quaternion().setFromEuler(
-        new THREE.Euler(beta, alpha, -gamma, 'YXZ')
-      );
-      deviceQ.multiply(_screenQ); // correct for phone held upright
+      // Yaw: ONLY from alpha (compass heading)
+      // Not affected by phone tilt (beta/gamma)
+      let da = alpha - baseAlpha;
+      if (da > 180) da -= 360;
+      if (da < -180) da += 360;
+      const yaw = THREE.MathUtils.degToRad(da);
 
-      // Extract forward direction from quaternion (stable, no gimbal lock)
-      const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(deviceQ);
-
-      // Yaw from horizontal projection of forward vector
-      let yaw = Math.atan2(-fwd.x, -fwd.z);
-      if (baseYaw === null) baseYaw = yaw;
-      yaw -= baseYaw;
-
-      // Pitch from vertical component
-      const pitch = Math.asin(Math.max(-1, Math.min(1, fwd.y)));
-
-      // Clean quaternion: yaw + pitch only, roll always 0
-      euler.set(pitch, yaw, 0, 'YXZ');
+      // Fixed pitch + no roll → floor plane ALWAYS horizontal
+      euler.set(FIXED_PITCH, yaw, 0, 'YXZ');
       targetQ.setFromEuler(euler);
     }
 
@@ -660,7 +649,7 @@
     function resetPos() {
       camX = 0;
       camZ = 0;
-      baseYaw = null;
+      baseAlpha = null;
       curQ.identity();
       targetQ.identity();
       tRotX = 0;
