@@ -344,7 +344,10 @@
 
 
   <div class="hud hud-bot" id="hudBot" style="display:none">
-    <button class="btn on" onclick="reconfig()">Remap</button>
+    <button class="btn" onclick="moveForward(-0.5)">Back</button>
+    <button class="btn on" onclick="moveForward(0.5)">Forward</button>
+    <button class="btn" onclick="resetPos()">Reset</button>
+    <button class="btn" onclick="reconfig()">Remap</button>
   </div>
 
   <div class="scanline" id="scanline" style="display:none"></div>
@@ -478,7 +481,18 @@
     let targetQ = new THREE.Quaternion();
     const euler = new THREE.Euler(0, 0, 0, 'YXZ');
 
-    // No position tracking — user stays in place, uses Remap to reposition
+    // Manual position tracking only (no auto step detection)
+    let camX = 0, camZ = 0;
+
+    function moveForward(dist) {
+      const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      dir.y = 0;
+      dir.normalize();
+      const newX = camX + dir.x * dist;
+      const newZ = camZ + dir.z * dist;
+      if (newX >= -roomL && newX <= roomR) camX = newX;
+      if (newZ >= -roomF && newZ <= roomB) camZ = newZ;
+    }
 
     function initSensors() {
       // Gyroscope
@@ -606,7 +620,8 @@
       curQ.slerp(targetQ, 0.3);
       camera.quaternion.copy(curQ);
 
-      // Camera stays at origin (0, 0, 0)
+      // Camera position — manual buttons only
+      camera.position.set(camX, 0, camZ);
 
       renderer.render(scene, camera);
 
@@ -632,7 +647,9 @@
     // ══════════════════════════════════════
     //  CONTROLS
     // ══════════════════════════════════════
-    function resetView() {
+    function resetPos() {
+      camX = 0;
+      camZ = 0;
       baseAlpha = null;
       curQ.identity();
       targetQ.identity();
