@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>AR WiFi Scanner</title>
+  <title>AR WiFi Floor Scanner</title>
   <style>
     * {
       margin: 0;
@@ -309,7 +309,7 @@
   <!-- ── Setup ── -->
   <div id="setup">
     <h2>AR WiFi Scanner</h2>
-    <p>Input the distance (meters) from you to each wall. Height is fixed at 4m.</p>
+    <p>Input the distance (meters) from you to each wall. Visualizes signal at 0.5m height.</p>
     <div class="room-inputs">
       <label>Front<input id="dF" type="number" value="5" min="0.5" max="50" step="0.5"></label>
       <label>Back<input id="dB" type="number" value="3" min="0.5" max="50" step="0.5"></label>
@@ -328,7 +328,7 @@
   <!-- ── HUD ── -->
   <div class="hud hud-top" id="hudTop" style="display:none">
     <div>
-      <h1>AR Signal Scanner</h1>
+      <h1>AR Floor Signal Scanner</h1>
       <div class="sub" id="subLabel">INITIALIZING</div>
     </div>
   </div>
@@ -363,8 +363,8 @@
     // ══════════════════════════════════════
     const SPACING = { Low: 0.5, Medium: 0.2, High: 0.1 };
     let densKey = 'Medium';
-    const ROOM_H = 4.0;
-    const EYE_H = 1.6; // eye height
+    const PLANE_H = 0.5; // signal plane height
+    const EYE_H = 1.5; // phone holding height
 
     // Room dimensions (set by user)
     let roomF = 5, roomB = 3, roomL = 2, roomR = 4;
@@ -414,13 +414,10 @@
     }
 
     // ══════════════════════════════════════
-    //  BUILD ROOM — uniform 3D grid in a cuboid
-    //  Camera at (0, 0, 0). Room extends:
-    //    X: -roomL to +roomR
-    //    Y: -EYE_H to +(ROOM_H - EYE_H)
-    //    Z: -roomB to +roomF  (forward = -Z in Three.js, but we use +Z here and flip camera)
-    //  Actually: Three.js camera looks down -Z by default.
-    //  So: forward = -Z. Room: Z from -roomF to +roomB, X from -roomL to +roomR
+    //  BUILD ROOM — 2D plane at PLANE_H (0.5m)
+    //  Camera at (0, 0, 0) = eye level (EYE_H=1.5m)
+    //  Signal plane Y = PLANE_H - EYE_H = -1.0 (1m below camera)
+    //  X: -roomL to +roomR, Z: -roomF to +roomB
     // ══════════════════════════════════════
     function buildRoom() {
       if (instancedMesh) {
@@ -431,29 +428,25 @@
       nodeData = [];
 
       const sp = SPACING[densKey];
-      const ballR = 0.012; // 1.2cm — small dots, perspective shows depth
+      const ballR = sp * 0.5; // ball diameter = spacing, radius = half
 
       const xMin = -roomL, xMax = roomR;
-      const yMin = -EYE_H + 0.1, yMax = ROOM_H - EYE_H - 0.1;
-      const zMin = -roomF, zMax = roomB; // -Z = forward
+      const zMin = -roomF, zMax = roomB;
+      const planeY = PLANE_H - EYE_H; // -1.0m below camera
 
       // Signal source: somewhere in left-front area of room
-      const srcX = xMin + (xMax - xMin) * 0.2; // toward left
-      const srcZ = zMin + (zMax - zMin) * 0.2; // toward front
-      const maxDist = Math.sqrt((xMax - xMin) ** 2 + (zMax - zMin) ** 2 + (yMax - yMin) ** 2);
+      const srcX = xMin + (xMax - xMin) * 0.2;
+      const srcZ = zMin + (zMax - zMin) * 0.2;
+      const maxDist = Math.sqrt((xMax - xMin) ** 2 + (zMax - zMin) ** 2);
 
       const points = [];
       for (let x = xMin; x <= xMax; x += sp) {
         for (let z = zMin; z <= zMax; z += sp) {
-          for (let y = yMin; y <= yMax; y += sp) {
-            // Signal based on distance from source — gradient across room
-            const dx = x - srcX, dz = z - srcZ, dy = y - 0;
-            const distToSrc = Math.sqrt(dx * dx + dz * dz + dy * dy);
-            const ratio = Math.min(distToSrc / maxDist, 1);
-            const sig = -25 - ratio * 65 + (Math.random() - 0.5) * 4;
-
-            points.push({ x, y, z, sig });
-          }
+          const dx = x - srcX, dz = z - srcZ;
+          const distToSrc = Math.sqrt(dx * dx + dz * dz);
+          const ratio = Math.min(distToSrc / maxDist, 1);
+          const sig = -25 - ratio * 65 + (Math.random() - 0.5) * 4;
+          points.push({ x, y: planeY, z, sig });
         }
       }
 
@@ -463,8 +456,8 @@
 
       totalNodes = points.length;
 
-      const geo = new THREE.SphereGeometry(1, 6, 6);
-      const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8 });
+      const geo = new THREE.SphereGeometry(1, 8, 8);
+      const mat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9 });
       instancedMesh = new THREE.InstancedMesh(geo, mat, totalNodes);
 
       const dummy = new THREE.Object3D();
